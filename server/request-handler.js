@@ -11,8 +11,13 @@ this file and include it in basic-server.js so that it actually works.
 *Hint* Check out the node module documentation at http://nodejs.org/api/modules.html.
 
 **************************************************************/
+var externalData = {'/classes/messages': []};
+var url = require('url');
 
 var requestHandler = function(request, response) {
+  console.log("Serving request type " + request.method + " for url " + request.url);
+  var data = '';
+  var statusCode = 405;
   // Request and Response come from node's http module.
   //
   // They include information about both the incoming request, such as
@@ -23,49 +28,69 @@ var requestHandler = function(request, response) {
   // http://nodejs.org/documentation/api/
 
   // Do some basic logging.
-  var data = {};
-  data.results = [];
   //
   // Adding more logging to your server can be an easy way to get passive
   // debugging help, but you should always be careful about leaving stray
   // console.logs in your code.
-  console.log("Serving request type " + request.method + " for url " + request.url);
 
+  var key = url.parse(request.url).pathname;
   // The outgoing status.
-  var statusCode;
-
-  var findStatusCode =  function(){
-    if (request.method === 'GET') {
-      statusCode = 200;
-    } else if (request.method === 'POST') {
+  //Handle POST
+  if (request.method === "POST") {
+    request.on('data', function(postData) {
+      data += postData;
+    });
+    request.on('end', function() {
+      // console.log(data);
+      var parsedData = JSON.parse(data);
+      if (!externalData[key]) {
+        externalData[key] = [];
+      }
+      externalData[key].push(parsedData);
       statusCode = 201;
-    } else {
-      statusCode = 404;
-    }
-  };
-  findStatusCode();
+      response.writeHead(statusCode, headers);
+      response.end();
+    });
+  }
 
+  if (request.method === "GET") {
+    if (!externalData[key]) {
+      statusCode = 404;
+      if (key.split('/')[1] === 'classes') {
+        statusCode = 200;
+      }
+      response.writeHead(statusCode, headers);
+      response.end(JSON.stringify({results: []}));
+    } else {
+      // request.on('end', function(){
+        data = {};
+        data["results"] = externalData[key];
+        statusCode = 200;
+        // console.log(JSON.stringify(data));
+        response.writeHead(statusCode, headers);
+        response.end(JSON.stringify(data));
+      // });
+    }
+  }
   // See the note below about CORS headers.
-  var headers = defaultCorsHeaders;
 
   // Tell the client we are sending them plain text.
   //
   // You will need to change this if you are sending something
   // other than plain text, like JSON or HTML.
-  headers['Content-Type'] = "JSON";
 
   // .writeHead() writes to the request line and headers of the response,
   // which includes the status and all headers.
-  response.writeHead(statusCode, headers);
 
   // Make sure to always call response.end() - Node may not send
   // anything back to the client until you do. The string you pass to
   // response.end() will be the body of the response - i.e. what shows
   // up in the browser.
+  var headers = defaultCorsHeaders;
+  headers['Content-Type'] = "JSON";
   //
   // Calling .end "flushes" the response's internal buffer, forcing
   // node to actually send all the data over to the client.
-  response.end(JSON.stringify(data));
 };
 
 // These headers will allow Cross-Origin Resource Sharing (CORS).
